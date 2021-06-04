@@ -1,94 +1,185 @@
-<?php include "_head.php"; ?>
 <?php require_once "connection_database.php"; ?>
+<?php require_once "guidv4.php" ?>
 <?php
-
 $id = null;
-if (!empty($_GET['id'])) {
-    $id = $_REQUEST['id'];
+$name = "";
+$image = "";
+$file_loading_error = [];
+if ($_SERVER['REQUEST_METHOD'] == 'GET') {
+    $id = $_GET["id"];
+    $command = $dbh->prepare("SELECT id, name, image FROM animals WHERE id = :id");
+    $command->bindParam(':id', $id);
+    $command->execute();
+    $row = $command->fetch(PDO::FETCH_ASSOC);
+    $name = $row['name'];
+    $image = $row['image'];
 }
 
-if (null == $id) {
-    header("Location: index.php");
-}
 
-if (!empty($_POST)) {
-    // keep track validation errors
-    $nameError = null;
-    $imageError = null;
-
-    // keep track post values
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $name = $_POST['name'];
     $image = $_POST['image'];
 
+    if (is_file($image)) {
+        unlink($image);
+    }
 
-    // validate input
-    $valid = true;
-    // check for space
-    $name = isset($name) ? trim($name) : false;
-    $image = isset($image) ? trim($image) : false;
-
+    $id = $_POST['id'];
+    $errors = [];
     if (empty($name)) {
-        $nameError = 'Please enter Name';
-        $valid = false;
-    }
-
-    if (empty($image)) {
-        $imageError = 'Please enter image';
-        $valid = false;
-    }
-
-
-    //update data
-    if ($valid) {
-        $sql = "UPDATE animals  set name = ?, image = ? WHERE id = ?";
-        $q = $dbh->prepare($sql);
-        $q->execute(array($name, $image, $id));
+        $errors["name"] = "Name is required";
+    } else if (empty((basename($_FILES["fileToUpload"]["name"])))) {
+        $stmt = $dbh->prepare("UPDATE animals SET name = :name, image = :image WHERE animals.id = :id;");
+        $stmt->bindParam(':id', $id);
+        $stmt->bindParam(':name', $name);
+        $stmt->bindParam(':image', $image);
+        $stmt->execute();
         header("Location: index.php");
+    } else {
+        $target_dir = "uploads/";
+        $ext = pathinfo(basename($_FILES["fileToUpload"]["name"]), PATHINFO_EXTENSION);
+        $target_file = $target_dir . guidv4() . "." . $ext;
+        $uploadOk = 1;
+        $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+
+        // Check if image file is a actual image or fake image
+        if (isset($_POST["submit"])) {
+            $check = getimagesize($_FILES["fileToUpload"]["tmp_name"]);
+            if ($check !== false) {
+                $uploadOk = 1;
+            } else {
+                array_push($file_loading_error, "File is not an image.");
+                $uploadOk = 0;
+            }
+        }
+
+        // Check file size
+        if ($_FILES["fileToUpload"]["size"] > 5000000) {
+            array_push($file_loading_error, "Sorry, your file is too large.");
+            $uploadOk = 0;
+        }
+
+        // Allow certain file formats
+        if (
+            $imageFileType != "jpg" && $imageFileType != "png" && $imageFileType != "jpeg"
+            && $imageFileType != "gif"
+        ) {
+            array_push($file_loading_error, "Sorry, only JPG, JPEG, PNG & GIF files are allowed.");
+            $uploadOk = 0;
+        }
+
+        // Check if $uploadOk is set to 0 by an error
+        if ($uploadOk == 0) {
+            array_push($file_loading_error, "Sorry, your file was not uploaded.");
+            // if everything is ok, try to upload file
+        } else {
+            if (move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file)) {
+                $stmt = $dbh->prepare("UPDATE animals SET name = :name, image = :image WHERE animals.id = :id;");
+                $stmt->bindParam(':id', $id);
+                $stmt->bindParam(':name', $name);
+                $stmt->bindParam(':image', $target_file);
+                $stmt->execute();
+                header("Location: index.php");
+                exit;
+            } else {
+                array_push($file_loading_error, "Sorry, there was an error uploading your file.");
+            }
+        }
     }
-} else {
-    //get data
-    $query = $dbh->prepare("SELECT * FROM animals where id = {$id}");
-    $query->execute();
-    $data = $query->fetch(PDO::FETCH_ASSOC);
-    $name = $data['name'];
-    $image = $data['image'];
 }
 ?>
 
-<body>
-    <div class="container m-5">
-        <div class="row">
-            <h3>Update enimal :</h3>
-        </div>
 
-        <form method="post">
+<?php include "_head.php"; ?>
 
-            <div class="row mb-3  <?php echo !empty($nameError) ? 'error' : ''; ?>">
-                <label class="col-sm-2 col-form-label text-right">Name :</label>
-                <div class="col-sm-10">
-                    <input class="form-control" name="name" type="text" placeholder="Name" value="<?php echo !empty($name) ? $name : ''; ?>">
-                    <?php if (!empty($nameError)) : ?>
-                        <span class="help-inline"><?php echo $nameError; ?></span>
-                    <?php endif; ?>
-                </div>
+<script>
+    function updateAnimal() {
+        $(`#name_error`).attr("hidden", true);
+        var name = document.forms[`editAnimal`][`name`];
+        if (name.value == '') {
+            $(`#name_error`).attr("hidden", false);
+            event.preventDefault()
+        }
+    }
+</script>
+
+<div class="container">
+    <div class="p-3">
+        <h2>Edit animal</h2>
+        <form name="editAnimal" onsubmit="return updateAnimal();" method="post" enctype="multipart/form-data">
+            <?php
+            if ($id != null)
+                echo "<input name='id' value='$id' hidden>"
+            ?>
+            <div class="form-group">
+                <label for="exampleInputEmail1">Animal: </label>
+                <?php
+                echo "<input type='text' name='name' class='form-control' id='exampleInputEmail1'
+                           placeholder='Enter animal name' value={$name}>"
+                ?>
+
+                <?php
+                if (isset($errors['name']))
+                    echo "<small class='text-danger'>{$errors['name']}</small>"
+                ?>
+                <small class='text-danger' id="name_error" hidden>Name is required!</small>
             </div>
 
-            <div class="row mb-3 <?php echo !empty($imageError) ? 'error' : ''; ?>">
-                <label class="col-sm-2 col-form-label text-right">Image :</label>
-                <div class="col-sm-10">
-                    <input class="form-control" name="image" type="text" placeholder="Image" value="<?php echo !empty($image) ? $image : ''; ?>">
-                    <?php if (!empty($imageError)) : ?>
-                        <span class="help-inline"><?php echo $imageError; ?></span>
-                    <?php endif; ?>
-                </div>
-            </div>
 
-            <div>
-                <button type="submit" class="btn btn-success">Update</button>
-                <a class="btn btn-primary" href="index.php">Back</a>
+            <div class="form-group">
+                <!--<label for="exampleInputPassword1">Image url: </label>-->
+                <?php
+                echo "<input type='text' name='image' class='form-control' id='exampleInputEmail1'
+                           placeholder='Enter animal name' value={$image} hidden>" ?>
+
+
+                <?php
+                /*                if (isset($errors['image']))
+                                    echo "<small class='text-danger'>{$errors['image']}</small>"
+                                */ ?>
+
+                <label for="exampleInputPassword1">Select image to upload:</label>
+
+
+
+                <?php
+                echo "<input class='form-control' type='file' name='fileToUpload' id='fileToUpload' onchange='preview_image(event)'>"
+                ?>
+
+                <?php
+                foreach ($file_loading_error as &$value) {
+                    echo "<small class='text-danger'>$value</small><br>";
+                }
+                ?>
+
+                <small class='text-danger' id="image_error" hidden>Image is required!</small>
             </div>
+            <button type="submit" class="btn btn-primary mt-2">Save changes</button>
+            <a class="btn btn-primary mt-2" href="index.php">Back</a>
+
+
+            <?php echo "<img id='output_image' style='width: 200px; height=200px; margin-top:10px; display:block' src='{$image}'/>" ?>
+
         </form>
-
-
     </div>
-</body>
+</div>
+
+
+
+
+<script type='text/javascript'>
+    function preview_image(event) {
+        var reader = new FileReader();
+        reader.onload = function() {
+            var output = document.getElementById('output_image');
+            output.src = reader.result;
+        }
+        reader.readAsDataURL(event.target.files[0]);
+    }
+</script>
+
+<!-- <div>
+    <img id="output_image" style='width: 200px; height=200px; margin-left:110px' />
+</div> -->
+
+<?php include "_footer.php"; ?>
