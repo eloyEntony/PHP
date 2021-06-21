@@ -159,39 +159,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             console.log(croppedData);
 
 
-            //file_put_contents('/uploads/1.jpg', file_get_contents(croppedData));
 
+            var pos = croppedData.indexOf(';base64,');
+            var type = croppedData.substring(5, pos);
+            var b64 = croppedData.substr(pos + 8);
 
-            //$fileToUpload.val(croppedData);
-            //convert base64 to img
-            // var image = new Image();
-            // image.src = 'data:image/png;base64,' + croppedData;
-            //fileToUpload.val(image);
+            // decode base64
 
-            // canvas = cropper.getCroppedCanvas({
-            //     width: 400,
-            //     height: 400
-            // });
-
-            // canvas.toBlob(function(blob) {
-            //     url = URL.createObjectURL(blob);
-            //     var reader = new FileReader();
-            //     reader.readAsDataURL(blob);
-            //     reader.onloadend = function() {
-            //         var base64data = reader.result;
-            //         $.ajax({
-            //             url: 'upload.php',
-            //             method: 'POST',
-            //             data: {
-            //                 image: base64data
-            //             },
-            //             success: function(data) {
-            //                 $modal.modal('hide');
-            //                 $('#fileToUpload').attr('src', data);
-            //             }
-            //         });
-            //     };
-            // });
 
         });
 
